@@ -29,6 +29,7 @@ class FragmentFilterConfig:
     mode: str = "keep"  # keep | split
     step: int = 1
     best_per_parent: bool = False
+    top_n: Optional[int] = None
     input_table: Optional[Path] = None
     output_name: Optional[str] = None
 
@@ -75,7 +76,11 @@ def _resolve_columns(df: pd.DataFrame) -> pd.DataFrame:
     out["parent_start"] = df[resolved["parent_start"]]
     out["parent_end"] = df[resolved["parent_end"]]
     out["parent_peptide"] = df[resolved["parent_peptide"]]
-    out["parent_length"] = df[resolved["parent_length"]] if "parent_length" in resolved else df[resolved["parent_peptide"]].astype(str).str.len()
+    out["parent_length"] = (
+        df[resolved["parent_length"]]
+        if "parent_length" in resolved
+        else df[resolved["parent_peptide"]].astype(str).str.len()
+    )
     out["parent_score"] = df[resolved["parent_score"]] if "parent_score" in resolved else None
 
     out["parent_start"] = pd.to_numeric(out["parent_start"], errors="coerce")
@@ -89,6 +94,7 @@ def _resolve_columns(df: pd.DataFrame) -> pd.DataFrame:
     out["parent_start"] = out["parent_start"].astype(int)
     out["parent_end"] = out["parent_end"].astype(int)
     out["parent_length"] = out["parent_length"].astype(int)
+
     return out
 
 
@@ -119,7 +125,6 @@ def find_candidate_table(out_dir: Path) -> Optional[Path]:
     if not all_tables:
         return None
 
-    # Prefer files with likely names
     keywords = ("peptide", "epitope", "output", "raw")
     scored = []
     for p in all_tables:
@@ -137,14 +142,25 @@ def heuristic_rank_score(fragment: str, offset_in_parent: int = 0) -> float:
 
     aromatic = sum(aa in "FWY" for aa in seq)
     positive = sum(aa in "KRH" for aa in seq)
-    gly_ser_penalty = sum(aa in "GSPNQ" for aa in seq)
+    hydrophobic = sum(aa in "AILMVFWY" for aa in seq)
+    low_complexity = sum(aa in "GSPNQ" for aa in seq)
 
-    base = 1.0
-    base += 0.10 * aromatic
-    base += 0.04 * positive
-    base -= 0.02 * gly_ser_penalty
-    base -= 0.005 * offset_in_parent
-    return round(base / length * 10, 4)
+    unique_ratio = len(set(seq)) / length
+
+    score = 1.0
+    score += 0.12 * aromatic
+    score += 0.05 * positive
+    score += 0.03 * hydrophobic
+    score -= 0.03 * low_complexity
+    score += 0.20 * unique_ratio
+    score -= 0.005 * offset_in_parent
+
+    if length < 6:
+        score -= 0.10
+    elif 8 <= length <= 12:
+        score += 0.10
+
+    return round(score / length * 10, 4)
 
 
 def keep_mode(df: pd.DataFrame, min_len: int, max_len: int) -> pd.DataFrame:
@@ -202,16 +218,23 @@ def split_mode(df: pd.DataFrame, min_len: int, max_len: int, step: int) -> pd.Da
     return pd.DataFrame(rows)
 
 
-def best_per_parent(df: pd.DataFrame) -> pd.DataFrame:
+def top_n_per_parent(df: pd.DataFrame, top_n: int = 1) -> pd.DataFrame:
     if df.empty:
         return df
 
+    if top_n < 1:
+        raise ValueError("top_n must be >= 1")
+
     sort_cols = ["parent_rank", "heuristic_rank_score", "fragment_length", "offset_in_parent"]
     ascending = [True, False, False, True]
+
     ranked = df.sort_values(sort_cols, ascending=ascending).copy()
-    best = ranked.groupby("parent_rank", as_index=False).head(1).copy()
-    best = best.sort_values(["parent_rank", "fragment_start", "fragment_end"]).reset_index(drop=True)
-    return best
+    kept = ranked.groupby("parent_rank", as_index=False).head(top_n).copy()
+    kept = kept.sort_values(
+        ["parent_rank", "heuristic_rank_score", "fragment_start"],
+        ascending=[True, False, True]
+    ).reset_index(drop=True)
+    return kept
 
 
 def write_fragment_table(df: pd.DataFrame, out_path: Path) -> None:
@@ -227,6 +250,7 @@ def run_fragment_filter(
     mode: str = "keep",
     step: int = 1,
     best_only: bool = False,
+    top_n: Optional[int] = None,
     input_table: Optional[Path] = None,
     output_name: Optional[str] = None,
 ) -> Path:
@@ -254,11 +278,19 @@ def run_fragment_filter(
         result = split_mode(parents, min_len=min_len, max_len=max_len, step=step)
 
     if best_only:
-        result = best_per_parent(result)
+        result = top_n_per_parent(result, top_n=1)
+
+    if top_n is not None:
+        if top_n < 1:
+            raise ValueError("top_n must be >= 1")
+        result = top_n_per_parent(result, top_n=top_n)
 
     if output_name is None:
         suffix = "tsv"
-        output_name = f"fragment_candidates_{mode}_{min_len}_{max_len}.{suffix}"
+        if mode == "split" and top_n is not None:
+            output_name = f"fragment_candidates_{mode}_{min_len}_{max_len}_top{top_n}.{suffix}"
+        else:
+            output_name = f"fragment_candidates_{mode}_{min_len}_{max_len}.{suffix}"
 
     out_path = out_dir / output_name
     write_fragment_table(result, out_path)

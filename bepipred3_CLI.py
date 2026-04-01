@@ -35,6 +35,8 @@ parser.add_argument("--frag_step", action="store", dest="frag_step", type=int, d
                     help="Sliding window step size for split mode. Default is 1.")
 parser.add_argument("--frag_best_per_parent", action="store_true", dest="frag_best_per_parent",
                     help="Keep only the best-ranked fragment per parent peptide.")
+parser.add_argument("--frag_top_n", action="store", dest="frag_top_n", type=int, default=None,
+                    help="Keep top N ranked fragments per parent peptide in split mode.")
 parser.add_argument("--frag_output_name", action="store", dest="frag_output_name", default=None,
                     help="Optional output file name for fragment filter result, e.g. fragment_candidates.tsv")
 
@@ -57,9 +59,10 @@ frag_max_len = args.frag_max_len
 frag_mode = args.frag_mode
 frag_step = args.frag_step
 frag_best_per_parent = args.frag_best_per_parent
+frag_top_n = args.frag_top_n
 frag_output_name = args.frag_output_name
 
-### FUCNCTIONS ###
+### FUNCTIONS ###
 def zip_function(result_files, outfile):
     zipf = zipfile.ZipFile(outfile, 'w')
     for result_file in result_files:
@@ -70,11 +73,22 @@ def zip_function(result_files, outfile):
 
 ## Load antigen input and create ESM-2 encodings ##
 
-#if you have the esm2 model stored locally, you can this command. To work you need both esm2_t33_650M_UR50D.pt and the esm2_t33_650M_UR50D-contact-regression.pt stored in same directory.
-#MyAntigens = bepipred3.Antigens(fasta_file, esm_dir, add_seq_len=add_seq_len, run_esm_model_local=str(WORK_DIR / "models" / "esm2_t33_650M_UR50D.pt") )
+# if you have the esm2 model stored locally, you can use this command.
+# To work you need both esm2_t33_650M_UR50D.pt and the esm2_t33_650M_UR50D-contact-regression.pt
+# stored in same directory.
+# MyAntigens = bepipred3.Antigens(
+#     fasta_file,
+#     esm_dir,
+#     add_seq_len=add_seq_len,
+#     run_esm_model_local=str(WORK_DIR / "models" / "esm2_t33_650M_UR50D.pt")
+# )
 
 MyAntigens = bepipred3.Antigens(fasta_file, esm_dir, add_seq_len=add_seq_len)
-MyBP3EnsemblePredict = bepipred3.BP3EnsemblePredict(MyAntigens, rolling_window_size=rolling_window_size, top_pred_pct=top_cands)
+MyBP3EnsemblePredict = bepipred3.BP3EnsemblePredict(
+    MyAntigens,
+    rolling_window_size=rolling_window_size,
+    top_pred_pct=top_cands
+)
 MyBP3EnsemblePredict.run_bp3_ensemble()
 
 out_dir.mkdir(parents=True, exist_ok=True)
@@ -92,6 +106,7 @@ if fragment_filter:
             mode=frag_mode,
             step=frag_step,
             best_only=frag_best_per_parent,
+            top_n=frag_top_n,
             input_table=frag_input_table,
             output_name=frag_output_name,
         )
@@ -104,10 +119,14 @@ if pred == "mjv_pred":
 elif pred == "vt_pred":
     MyBP3EnsemblePredict.bp3_pred_variable_threshold(out_dir, var_threshold=var_threshold)
 
-#generate plots (generating graphs for a maximum of 40 proteins)
-MyBP3EnsemblePredict.bp3_generate_plots(out_dir, num_interactive_figs=50, use_rolling_mean=plot_linear_epitope_scores)
+# generate plots (generating graphs for a maximum of 40 proteins)
+MyBP3EnsemblePredict.bp3_generate_plots(
+    out_dir,
+    num_interactive_figs=50,
+    use_rolling_mean=plot_linear_epitope_scores
+)
 
-#zip results
+# zip results
 if zip_results:
     print("Zipping results")
     result_files = [f for f in out_dir.glob("*") if f.suffix != ".html"]
