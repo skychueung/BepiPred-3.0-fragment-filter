@@ -1,3 +1,8 @@
+# BepiPred-3.0-fragment-filter
+
+> 本仓库在原始 BepiPred-3.0 基础上新增了一个可选的片段过滤补丁，用于将预测表位进一步筛选为 5–15 aa 的候选短肽。
+
+This patch adds an optional post-processing fragment filter to BepiPred-3.0, enabling 5–15 aa candidate peptide extraction in keep or split mode.
 # BepiPred-3.0
 BepiPred3.0 predicts B-cell epitopes from ESM-2 encodings of proteins sequences. You can you this github to setup for local installment of BepiPred-3.0.
 We also provide BepiPred-3.0 is also provided as a [web service](https://services.healthtech.dtu.dk/service.php?BepiPred-3.0).
