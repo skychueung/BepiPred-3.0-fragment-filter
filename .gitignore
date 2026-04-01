@@ -1,6 +1,7 @@
-**/.ipynb_checkpoints/
-**/__pycache__/
-**/esm1b_encodings/
-**/esm2_t33_650M_UR50D.pt
-**/esm2_t33_650M_UR50D-contact-regression.pt
-misc/biolib_bepipred3/esm1b_encodings/
+__pycache__/
+*.pyc
+esm_encodings/
+output/
+output_no_filter/
+.idea/
+.ipynb_checkpoints/
