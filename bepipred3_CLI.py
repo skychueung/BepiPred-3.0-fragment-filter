@@ -1,7 +1,7 @@
 ### IMPORTS AND STATIC PATHS ###
 from bp3 import bepipred3
 from bp3.fragment_filter import run_fragment_filter
-from bp3.physicochemical_filter import run_physicochemical_filter
+from bp3.physicochemical_filter import run_physicochemical_filter, run_physicochemical_filter_layered
 from pathlib import Path
 import argparse
 import zipfile
@@ -56,6 +56,9 @@ parser.add_argument("--phys_max_cys", action="store", dest="phys_max_cys", type=
                     help="Maximum allowed cysteine count.")
 parser.add_argument("--phys_exclude_high_disulfide_risk", action="store_true", dest="phys_exclude_high_disulfide_risk",
                     help="Exclude peptides with higher/high disulfide risk.")
+parser.add_argument("--phys_output_mode", action="store", dest="phys_output_mode",
+                    choices=["single", "layered"], default="single",
+                    help="Output mode: 'single' (one combined file, default) or 'layered' (separate files per filter step).")
 
 args = parser.parse_args()
 fasta_file = args.fasta_file
@@ -86,6 +89,7 @@ phys_min_pi = args.phys_min_pi
 phys_max_pi = args.phys_max_pi
 phys_max_cys = args.phys_max_cys
 phys_exclude_high_disulfide_risk = args.phys_exclude_high_disulfide_risk
+phys_output_mode = args.phys_output_mode
 
 ### FUNCTIONS ###
 def zip_function(result_files, outfile):
@@ -146,23 +150,38 @@ if physicochemical_filter:
         if fragment_output_path is None:
             raise ValueError("physicochemical_filter requires fragment_filter output. Please enable --fragment_filter first.")
 
-        phys_output_name = fragment_output_path.stem + "_physicochemical.tsv"
-        phys_output_path = out_dir / phys_output_name
+        if phys_output_mode == "layered":
+            stem = fragment_output_path.stem
+            run_physicochemical_filter_layered(
+                input_table=fragment_output_path,
+                output_dir=out_dir,
+                stem=stem,
+                sequence_col="fragment",
+                min_charge=phys_min_charge,
+                max_gravy=phys_max_gravy,
+                min_pi=phys_min_pi,
+                max_pi=phys_max_pi,
+                max_cys=phys_max_cys,
+                exclude_high_disulfide_risk=phys_exclude_high_disulfide_risk,
+            )
+        else:
+            phys_output_name = fragment_output_path.stem + "_physicochemical.tsv"
+            phys_output_path = out_dir / phys_output_name
 
-        run_physicochemical_filter(
-            input_table=fragment_output_path,
-            output_table=phys_output_path,
-            sequence_col="fragment",
-            length_col="fragment_length",
-            start_col="fragment_start",
-            end_col="fragment_end",
-            min_charge=phys_min_charge,
-            max_gravy=phys_max_gravy,
-            min_pi=phys_min_pi,
-            max_pi=phys_max_pi,
-            max_cys=phys_max_cys,
-            exclude_high_disulfide_risk=phys_exclude_high_disulfide_risk,
-        )
+            run_physicochemical_filter(
+                input_table=fragment_output_path,
+                output_table=phys_output_path,
+                sequence_col="fragment",
+                length_col="fragment_length",
+                start_col="fragment_start",
+                end_col="fragment_end",
+                min_charge=phys_min_charge,
+                max_gravy=phys_max_gravy,
+                min_pi=phys_min_pi,
+                max_pi=phys_max_pi,
+                max_cys=phys_max_cys,
+                exclude_high_disulfide_risk=phys_exclude_high_disulfide_risk,
+            )
     except Exception as e:
         print(f"[physicochemical_filter] WARNING: physicochemical filter failed: {e}")
 

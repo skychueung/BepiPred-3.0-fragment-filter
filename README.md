@@ -157,6 +157,42 @@ python bepipred3_CLI.py \
   --phys_exclude_high_disulfide_risk
 ```
 
+### D. Fragment filter + physicochemical filter (layered mode)
+
+Generate independent per-layer output files to compare the effect of each physicochemical filter step:
+
+```bash
+python bepipred3_CLI.py \
+  -i P11311_full_sequence.fasta \
+  -o output_test_layered \
+  -pred vt_pred \
+  --fragment_filter \
+  --frag_input_table iedb_p1_results.tsv \
+  --frag_min_len 5 \
+  --frag_max_len 15 \
+  --frag_mode keep \
+  --physicochemical_filter \
+  --phys_output_mode layered \
+  --phys_min_charge 0 \
+  --phys_max_gravy 0 \
+  --phys_min_pi 8.0 \
+  --phys_max_pi 11.5 \
+  --phys_max_cys 1 \
+  --phys_exclude_high_disulfide_risk
+```
+
+**Layered mode output files** (each applies ONLY its own criterion independently):
+
+| File | Filter Applied | Input Rows | Output Rows |
+|------|---------------|------------|-------------|
+| `*_charge.tsv` | Net charge > threshold | 8 | 4 |
+| `*_pi.tsv` | pI within range | 8 | 4 |
+| `*_gravy.tsv` | GRAVY < threshold | 8 | 5 |
+| `*_cys.tsv` | Cys count + disulfide risk | 8 | 7 |
+| `*_final.tsv` | All criteria combined | 8 | 4 |
+
+This lets you directly compare how each physicochemical property independently affects candidate peptide selection.
+
 ---
 
 ## CLI Arguments Reference
@@ -186,6 +222,7 @@ python bepipred3_CLI.py \
 | `--phys_max_pi` | float | None | Maximum isoelectric point |
 | `--phys_max_cys` | int | None | Maximum cysteine count |
 | `--phys_exclude_high_disulfide_risk` | flag | False | Exclude high/higher disulfide risk peptides |
+| `--phys_output_mode` | str | single | Output mode: `single` (one combined file) or `layered` (separate files per filter step) |
 
 ---
 
@@ -237,8 +274,10 @@ The CLI passes `top_n=frag_top_n` to `run_fragment_filter()`, but the original f
 
 | Test | Mode | Output | Status |
 |------|------|--------|--------|
-| A | keep | `fragment_candidates_keep_5_15.tsv` | ✅ Pass |
-| B | split + top_n=3 | `fragment_candidates_split_5_15_top3.tsv` | ✅ Pass |
-| C | keep + physicochemical | `fragment_candidates_keep_5_15_physicochemical.tsv` | ✅ Pass |
+| A | keep | `fragment_candidates_keep_5_15.tsv` | Pass |
+| B | split + top_n=3 | `fragment_candidates_split_5_15_top3.tsv` | Pass |
+| C | keep + physicochemical (single) | `fragment_candidates_keep_5_15_physicochemical.tsv` | Pass |
+| D | keep + physicochemical (layered) | 5 independent files | Pass |
+| E | split + top_n=3 + physicochemical (layered) | 5 independent files | Pass |
 
 All physicochemical columns verified: `Net_Charge_pH7.4`, `pI`, `GRAVY`, `Cys_Count`, `Disulfide_Risk`.
